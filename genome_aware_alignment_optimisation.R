@@ -38,7 +38,7 @@ for(i in 2:length(gn)){
   }
 }
 
-
+pattern = "[^ACTG-]"
 
 
 #for each transcript
@@ -89,18 +89,7 @@ for( t1 in 1:length(gn)){ # for each transcript
   #write.FASTA(temp.msa,file = "temp.msa.fasta")
   
   
-  
-  # ----------------------------- align by transcript & reverse back
-  # as this is all definitely now a transcript block we can remove all the gaps before re-alignment
-  # http://www.bioconductor.org/packages/release/bioc/vignettes/DECIPHER/inst/doc/ArtOfAlignmentInR.pdf
-  a = del.gaps(temp.msa)
-  a = a %>% as.character %>% lapply(.,paste0,collapse="") %>% unlist %>% DNAStringSet # format conversion
-  a = DECIPHER::AlignTranslation(a) # translate to AA, align, then translate back 
-  write.dna(a,format = "fasta", "temp_a.fasta")
-  b = ape::read.dna("temp_a.fasta", format = "fasta",as.matrix = T) # bodge, cant get this to work well without
-
-  
-  # -----------------------------  bind by col to part before.
+  #---------------------------- insert between transcript blocks
   
   if(t1 == 1){ # if the first transcript block
     new.msa = msa[,1:(match.start - 1)] # all the alignment up until the first transcript
@@ -109,6 +98,31 @@ for( t1 in 1:length(gn)){ # for each transcript
     new.msa = as.character(cbind(new.msa, msa[, (match.end.prev + 1) : (match.start - 1)])) # append msa between last transcript and current transcript
   }
   match.end.prev = match.end # update for next loop
+  
+  
+  
+  
+  
+  # ----------------------------- align by transcript & reverse back
+  # as this is all definitely now a transcript block we can remove all the gaps before re-alignment
+  # http://www.bioconductor.org/packages/release/bioc/vignettes/DECIPHER/inst/doc/ArtOfAlignmentInR.pdf
+  a = del.gaps(temp.msa)
+  a = a %>% as.character %>% lapply(.,paste0,collapse="") %>% unlist %>% DNAStringSet # format conversion
+  
+  if(min(a@ranges@width) < 3){ # if we have issues with sequences
+    new.msa = as.character(cbind(new.msa, temp.msa)) # just append as is.
+    next
+  }
+  
+
+  a = DECIPHER::AlignTranslation(a) # translate to AA, align, then translate back 
+  write.dna(a,format = "fasta", "temp_a.fasta")
+  b = ape::read.dna("temp_a.fasta", format = "fasta",as.matrix = T) # bodge, cant get this to work well without
+  
+  
+  # -----------------------------  bind by col to part before.
+  
+
   
   #write.dna(new.msa,format = "fasta", "temp_new.msa.fasta")
   new.msa = as.character(cbind(new.msa, b)) # all new columns to existing new 

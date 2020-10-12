@@ -1,0 +1,93 @@
+# script to optimise multiple sequence alignments, by their translated protein sequences. For a whole genome
+
+library(ape)
+library(Biostrings)       # Provides DNAString, DNAStringSet, etc
+library(GenomicRanges)    # Provides GRanges, etc
+library(GenomicFeatures)  # provides Txdb
+library(stringr)
+
+### inputs
+in.msa = "all_raw_best_msa_man.fasta"
+in.ref.match = "erlin"
+in.ref_seq = "ref/NC_006273.2.fasta"
+in.ref_gff = "ref/NC_006273.2.gff3"
+### inputs end
+
+### load
+msa = ape::read.dna(in.msa, format = "fasta",as.matrix = T)
+ref.seq = as.character(ape::read.dna(in.ref_seq, "fasta"))
+ref.seq.string = paste(ref.seq, collapse = "")
+### end load
+
+# get transcripts
+txdb <- makeTxDbFromGFF(file=in.ref_gff, format="gff3")
+#gn <- genes(txdb)
+gn = transcriptsBy(txdb, by = "gene") # as we
+gn = as.data.frame(gn)
+gn = gn[order(gn$start),]
+gn = gn[!grepl("rna", gn$tx_name),] # remove rna
+
+
+# check transcripts do not overlap
+for(i in 2:length(gn)){ 
+  if(gn[i,4] < gn[i-1,5]){
+    print(paste(i, "error"))
+    warning("transripts are overlapping")
+    break
+  }
+}
+
+
+
+
+#for each transcript
+# get reference start and end kmer
+# locate start and end of reference in msa
+# extract msa chunk
+# RC if needed
+# align by transcript
+# reverse back
+# bind by row to part before. using rbind of matrix
+# next
+
+ref.msa.index = grep(pattern = in.ref.match,labels(msa)) # index of ref in msa
+for( t1 in 1:length(gn)){ # for each transcript
+  
+  #------------------------------ get reference start and end kmer
+  t.start = gn$start[t1]
+  t.end = gn$end[t1] + (gn$width[t1] -1)
+  t.ref = ref.seq[t.start:t.end]
+  t.ref.collapse = paste(t.ref,collapse = "") # seq of transcript
+  
+  # buld regex allowing for insertions for start and end of transcript
+  t.pattern = ""  
+  for(t.char in t.ref){
+    t.pattern = paste0(t.pattern, t.char, "[-]{0,1000}") # allow multiple insertions
+  }
+  
+  # ----------------------------- locate start and end of reference in msa
+  match.loc = str_locate(ref.msa.string, t.pattern) 
+  match.start = t.msa.loc[1]
+  match.end = t.msa.loc[2]
+  
+  
+  # ----------------------------- extract msa regions
+  temp.msa = msa[,match.start:match.end]
+  
+  
+  # ----------------------------- RC if needed
+  if(gn$strand[t1] == "-"){
+    # reverse complement
+    temp.msa = ape::complement(temp.msa)
+  }else{
+    # do nothing
+  }
+  
+  
+  
+
+  
+  
+}
+
+

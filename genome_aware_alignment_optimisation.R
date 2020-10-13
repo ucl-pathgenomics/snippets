@@ -1,4 +1,5 @@
 # script to optimise multiple sequence alignments, by their translated protein sequences. For a whole genome.
+# todo - make is spit out a concatenated fasta. for now pulls the gene fastas
 
 library(ape)
 library(Biostrings)       # Provides DNAString, DNAStringSet, etc
@@ -7,8 +8,9 @@ library(GenomicFeatures)  # provides Txdb
 library(stringr)
 library(DECIPHER) # amino acid alignment handling
 
+
 ### inputs
-in.msa = "all_raw_best_msa_man.fasta"
+in.msa = "all_raw_best_msa_man_noSG_noclone.fasta"
 in.ref.match = "erlin"    # reference should be aligned, this is a unique string to identify the sequence in the msa.
 in.ref_seq = "ref/NC_006273.2.fasta"
 in.ref_gff = "ref/NC_006273.2.gff3"
@@ -56,10 +58,10 @@ pattern = "[^ACTG-]"
 ref.msa.index = grep(pattern = in.ref.match,labels(msa)) # index of ref in msa
 ref.msa.string = as.character(msa[ref.msa.index,])
 ref.msa.string = paste(ref.msa.string, collapse = "")
-for( t1 in 1:nrow(gn)){ # for each transcript
+#for( t1 in 1:nrow(gn)){ # for each transcript
+for( t1 in 155:nrow(gn)){ # for each transcript
 #for( t1 in 1:10){ # for each transcript
-  print(paste(gn$group_name[t1], gn$cds_id[t1]))
-  
+  print(paste(gn$group_name[t1], gn$cds_id[t1], "- ", t1))
   #------------------------------ get reference start and end kmer
   t.start = gn$start[t1]
   t.end = gn$end[t1]
@@ -80,7 +82,9 @@ for( t1 in 1:nrow(gn)){ # for each transcript
   }
   
   # ----------------------------- locate start and end of reference in msa
-  match.loc = str_locate(ref.msa.string, t.pattern) 
+  tt <- invisible(try(str_locate(ref.msa.string, t.pattern), silent = T)) # try string match
+  if(is(tt, "try-error")){next} #if this is a regex error, skip to next
+  match.loc = str_locate(ref.msa.string, t.pattern)
   match.start = match.loc[1]
   match.end = match.loc[2]
   
@@ -92,24 +96,25 @@ for( t1 in 1:nrow(gn)){ # for each transcript
   # ----------------------------- RC if needed
   if(gn$strand[t1] == "-"){
     # reverse complement
+    write.FASTA(temp.msa,file = paste0(out.dir, "/", t.name, ".orig.FASTA"))
     temp.msa = ape::complement(temp.msa)
   }else{
     # do nothing
   }
-  write.FASTA(temp.msa,file = paste0(out.dir, "/", t.name, ".FASTA"))
+  write.FASTA(temp.msa,file = paste0(out.dir, "/", t.name, ".RC.FASTA"))
   
   
   
   #---------------------------- insert between transcript blocks
   
-  if(t1 == 1){ # if the first transcript block
-    new.msa = msa[,1:(match.start - 1)] # all the alignment up until the first transcript
-  }else{
-    # take last transcript + 1 till new transcript - 1
-    new.msa = as.character(cbind(new.msa, msa[, (match.end.prev + 1) : (match.start - 1)])) # append msa between last transcript and current transcript
-  #//todo
-  }
-  match.end.prev = match.end # update for next loop
+  # if(!exists("new.msa")){ # if the first transcript block
+  #   new.msa = msa[,1:(match.start - 1)] # all the alignment up until the first transcript
+  # }else{
+  #   # take last transcript + 1 till new transcript - 1
+  #   new.msa = as.character(cbind(new.msa, msa[, (match.end.prev + 1) : (match.start - 1)])) # append msa between last transcript and current transcript
+  # #//todo
+  # }
+  # match.end.prev = match.end # update for next loop
   
   
   
@@ -119,37 +124,52 @@ for( t1 in 1:nrow(gn)){ # for each transcript
   # as this is all definitely now a transcript block we can remove all the gaps before re-alignment
   # http://www.bioconductor.org/packages/release/bioc/vignettes/DECIPHER/inst/doc/ArtOfAlignmentInR.pdf
   a = del.gaps(temp.msa)
+  z = try(write.FASTA(ape::trans(a),file = paste0(out.dir, "/", t.name, ".AA.FASTA")), silent = T)
+  if(is(z, "try-error")){next} # codon is affected by a poor sequence, AA will be hard to compute next
   write.FASTA(ape::trans(a),file = paste0(out.dir, "/", t.name, ".AA.FASTA"))
-  a = a %>% as.character %>% lapply(.,paste0,collapse="") %>% unlist %>% DNAStringSet # format conversion
   
+  a = a %>% as.character %>% lapply(.,paste0,collapse="") %>% unlist %>% DNAStringSet # format conversion
   if(min(a@ranges@width) < 3){ # if we have issues with sequences
-    new.msa = as.character(cbind(new.msa, temp.msa)) # just append as is.
+    #new.msa = as.character(cbind(new.msa, temp.msa)) # just append as is.
     print("skipping")
     next
   }
   
   invisible({capture.output({a =  DECIPHER::AlignTranslation(a)})}) # translate to AA, align, then translate back 
-  write.dna(a,format = "fasta", "temp_a.fasta")
-  b = ape::read.dna("temp_a.fasta", format = "fasta") # bodge, cant get this to work well without
+  z = try(write.FASTA(ape::trans(a),file = paste0(out.dir, "/", t.name, ".AA.optim.FASTA")), silent = T)
+  if(is(z, "try-error")){next} # codon is affected by a poor sequence, AA will be hard to compute next
+  write.FASTA(ape::trans(a),file = paste0(out.dir, "/", t.name, ".AA.optim.FASTA")) # does write if error
+  #write.dna(a,format = "fasta", "temp_a.fasta")
+  #b = ape::read.dna("temp_a.fasta", format = "fasta") # bodge, cant get this to work well without
   
   
   # -----------------------------  bind by col to part before.
   # write.dna(new.msa,format = "fasta", "temp_new.msa.fasta")
-  new.msa = cbind(new.msa, b) # all new columns to existing new 
+  #new.msa = cbind(new.msa, b) # all new columns to existing new 
   #as.character is ineficient memory usage whilst script is running
   # write.dna(new.msa,format = "fasta", "temp_new.new.msa.fasta")
   
   if(t1 == length(gn)){ # if this is the last transcript
     # append rest of msa
-    new.msa = as.character(cbind(new.msa, msa[, (match.end + 1) : length(msa[1,])]))
+    #new.msa = as.character(cbind(new.msa, msa[, (match.end + 1) : length(msa[1,])]))
   }
   
 }
 
 write.FASTA(new.msa, file = "allignment_optimised_msa.fasta")
 
+
+new.msa2 = new.msa
+
+
+nrow(new.msa2)
+
+write.dna(new.msa2, file = "a111.fasta", format = "fasta")
 print("complete")
 
+
+
+lapply(new.msa2, function(x) paste0(x, collapse = ''))
 
 
 

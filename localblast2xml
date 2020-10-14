@@ -1,0 +1,34 @@
+# blast 2 sequences uses local blast+
+# to get alignment
+
+indir = "BICres/out-clean/fasta/"
+outdir = "BICres/blast-local/"
+blast_hit_msa = "BICres/blast/merged_toallign.fasta"
+
+library(stringr)
+
+
+infiles = list.files(indir,pattern = "*.fasta", full.names = T,recursive = F)
+
+for(file in infiles){
+  # for each file
+  textcmv = readLines(file)  
+  text_query = textcmv[1:2]
+  text_subject = c(readLines(blast_hit_msa), textcmv[c(-1,-2)])
+  text_subject = readLines(blast_hit_msa)
+  
+  text_query = str_replace_all(text_query, "-", "")
+  text_subject = str_replace_all(text_subject, "-", "")
+  
+  writeLines(text_query, paste0(outdir, "temp_query.fasta"))
+  writeLines(text_subject, paste0(outdir, "temp_subject.fasta"))
+  
+  # blastn -query file1.fa -subject file2.fa
+  command = paste("C:/Oscar/apps/blast/blast-2.9.0+/bin/blastn.exe -query ",
+                  paste0(outdir, "temp_query.fasta"),
+                  "-subject",
+                  paste0(outdir, "temp_subject.fasta"), " -word_size 11 -outfmt 5")
+  out = system(command,intern = T)
+  writeLines(out, paste0(outdir,basename(file),".xml"))
+  
+}
